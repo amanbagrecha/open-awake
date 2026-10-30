@@ -467,9 +467,14 @@ async function api(path, body) {
   }
 }
 
+async function fresh() {
+  try { await fused.daemon.start(); } catch (e) {}
+}
+
 async function toggle() {
   if (busy) return;
   busy = true; $("go").setAttribute("aria-busy", "true");
+  await fresh();
   await (state.active ? api("stop") : api("start", { minutes: minutes(), display: keepDisplay(), lid: keepLid() }));
   busy = false; $("go").removeAttribute("aria-busy");
   $("go").focus();
@@ -478,6 +483,7 @@ async function toggle() {
 // The daemon replaces a running session on start, so this switches it in place.
 async function restart(mins, display, lid) {
   busy = true; $("go").setAttribute("aria-busy", "true");
+  await fresh();
   await api("start", { minutes: mins, display, lid });
   busy = false; $("go").removeAttribute("aria-busy");
 }
