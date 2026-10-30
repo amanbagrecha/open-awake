@@ -287,6 +287,10 @@ h1, h2, .caps { font-family: var(--font-display); text-transform: uppercase; let
         <button class="sw" id="display" role="switch" aria-checked="true" aria-label="Keep display on"></button>
         <span>macOS display awake</span>
       </div>
+      <div class="opt">
+        <button class="sw" id="lid" role="switch" aria-checked="false" aria-label="Stay awake with lid closed"></button>
+        <span>Lid closed too (asks for admin password)</span>
+      </div>
       <div class="orn" aria-hidden="true"><i></i><b></b><i></i></div>
     </div>
   </section>
@@ -321,6 +325,7 @@ let busy = false;
 let pollTimer = null;
 
 const minutes = () => Number(fused.params.get("d") ?? 60);
+const keepLid = () => fused.params.get("lid") === "true";
 const keepDisplay = () => fused.params.get("display") !== "false";
 const pad = (n) => String(Math.floor(n)).padStart(2, "0");
 const hms = (s) => `${pad(s / 3600)}:${pad((s % 3600) / 60)}:${pad(s % 60)}`;
@@ -342,6 +347,7 @@ function renderDuration() {
   if (!opts.some(([, m]) => m === sel)) opts.push([dur(sel * 60) + " left", sel]);
   $("dur").innerHTML = opts.map(([label, m]) => `<option value="${m}"${m === sel ? " selected" : ""}>${label}</option>`).join("");
   $("display").setAttribute("aria-checked", String(running() ? !!state.display : keepDisplay()));
+  $("lid").setAttribute("aria-checked", String(running() ? !!state.lid : keepLid()));
 }
 
 function setLabel(full, short) {
@@ -464,15 +470,15 @@ async function api(path, body) {
 async function toggle() {
   if (busy) return;
   busy = true; $("go").setAttribute("aria-busy", "true");
-  await (state.active ? api("stop") : api("start", { minutes: minutes(), display: keepDisplay() }));
+  await (state.active ? api("stop") : api("start", { minutes: minutes(), display: keepDisplay(), lid: keepLid() }));
   busy = false; $("go").removeAttribute("aria-busy");
   $("go").focus();
 }
 
 // The daemon replaces a running session on start, so this switches it in place.
-async function restart(mins, display) {
+async function restart(mins, display, lid) {
   busy = true; $("go").setAttribute("aria-busy", "true");
-  await api("start", { minutes: mins, display });
+  await api("start", { minutes: mins, display, lid });
   busy = false; $("go").removeAttribute("aria-busy");
 }
 
@@ -484,7 +490,7 @@ async function boot() {
   $("dur").onchange = () => {
     const m = Number($("dur").value);
     fused.params.set("d", String(m));
-    if (running() && !busy) restart(m, state.display);
+    if (running() && !busy) restart(m, state.display, state.lid);
   };
   $("display").onclick = () => {
     if (running()) {
@@ -492,9 +498,18 @@ async function boot() {
       fused.params.set("display", String(!state.display));
       // Keep the same end time; an open-ended session stays open-ended.
       const left = state.ends ? Math.max(1, (state.ends - nowSrv()) / 60) : 0;
-      restart(left, !state.display);
+      restart(left, !state.display, state.lid);
     } else {
       fused.params.set("display", String(!keepDisplay()));
+    }
+  };
+  $("lid").onclick = () => {
+    if (running()) {
+      if (busy) return;
+      fused.params.set("lid", String(!state.lid));
+      restart(state.ends ? Math.max(1, (state.ends - nowSrv()) / 60) : 0, state.display, !state.lid);
+    } else {
+      fused.params.set("lid", String(!keepLid()));
     }
   };
   // status() never starts the daemon; only a click does.

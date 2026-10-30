@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import secrets
+import shlex
 import shutil
 import subprocess
 import sys
@@ -46,6 +47,30 @@ def _read_log():
         return []
 
 
+def _lid_flag():
+    return os.path.join(CACHE, "lid.on")
+
+
+def _lid_off():
+    try:
+        os.remove(_lid_flag())
+    except OSError:
+        pass
+
+
+def _lid_on():
+    os.makedirs(CACHE, exist_ok=True)
+    flag = _lid_flag()
+    open(flag, "w").close()
+    sh = (f"pmset -a disablesleep 1; (while [ -e {shlex.quote(flag)} ] && kill -0 {os.getpid()} 2>/dev/null; "
+          f"do sleep 1; done; pmset -a disablesleep 0; rm -f {shlex.quote(flag)}) </dev/null >/dev/null 2>&1 &")
+    script = 'do shell script "%s" with administrator privileges' % sh.replace("\\", "\\\\").replace('"', '\\"')
+    r = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True)
+    if r.returncode != 0:
+        _lid_off()
+        raise RuntimeError("Closed-lid mode needs admin approval")
+
+
 def _end_locked(reason):
     """Stop the running caffeinate, record the session and clear it. Caller holds LOCK.
 
@@ -57,6 +82,8 @@ def _end_locked(reason):
     if not s:
         return
     SESSION = None
+    if reason != "replaced":
+        _lid_off()
     s["proc"].kill()
     s["proc"].wait()
     entry = {
@@ -64,6 +91,7 @@ def _end_locked(reason):
         "end": time.time(),
         "planned": s["planned"],
         "display": s["display"],
+        "lid": s["lid"],
         "reason": reason,
     }
     try:
@@ -73,7 +101,7 @@ def _end_locked(reason):
         pass
 
 
-def _start(minutes, display):
+def _start(minutes, display, lid=False):
     exe = shutil.which("caffeinate") or "/usr/bin/caffeinate"
     if not os.path.exists(exe):
         raise RuntimeError("caffeinate not found: Open Awake needs macOS")
@@ -84,6 +112,10 @@ def _start(minutes, display):
     cmd = [exe, "-i", "-m", "-s", "-w", str(os.getpid())]
     if display:
         cmd.append("-d")
+    if lid and not os.path.exists(_lid_flag()):
+        _lid_on()
+    elif not lid:
+        _lid_off()
     with LOCK:
         _end_locked("replaced")
         proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL,
@@ -91,7 +123,7 @@ def _start(minutes, display):
         now = time.time()
         globals()["SESSION"] = {
             "start": now, "ends": now + secs if secs else None,
-            "planned": secs, "display": bool(display), "proc": proc,
+            "planned": secs, "display": bool(display), "lid": bool(lid), "proc": proc,
         }
 
 
@@ -110,7 +142,7 @@ def _snapshot():
         s = SESSION
         out = {"active": bool(s), "now": time.time(), "log": _read_log()[::-1]}
         if s:
-            out.update(start=s["start"], ends=s["ends"], display=s["display"])
+            out.update(start=s["start"], ends=s["ends"], display=s["display"], lid=s["lid"])
         return out
 
 
@@ -150,7 +182,7 @@ class Handler(BaseHTTPRequestHandler):
                 threading.Thread(target=SERVER.shutdown, daemon=True).start()
                 return
             if route == "/start":
-                _start(float(body.get("minutes") or 0), bool(body.get("display", True)))
+                _start(float(body.get("minutes") or 0), bool(body.get("display", True)), bool(body.get("lid", False)))
             elif route == "/stop":
                 _stop()
             elif route != "/state":
@@ -170,6 +202,7 @@ def main():
     ap.add_argument("--version", required=True)
     a = ap.parse_args()
     CACHE, VERSION, TOKEN = a.cache, a.version, secrets.token_urlsafe(24)
+    _lid_off()
     SERVER = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     _atomic_write(a.status, {"port": SERVER.server_address[1], "token": TOKEN, "pid": os.getpid()})
     threading.Thread(target=_watch, daemon=True).start()

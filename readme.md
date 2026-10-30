@@ -14,5 +14,10 @@ Amphetamine-style wrapper around macOS's own `caffeinate`.
 - Sessions survive closing the tab. A small background daemon (`awake.py`)
   owns `caffeinate -w`, so it never leaves an orphaned process.
 
-> macOS only. A MacBook with the lid closed on battery still sleeps; that's
-> an OS rule. Stdlib Python, no dependencies.
+- Optional **Lid closed too** switch: runs `pmset disablesleep 1` after an
+  admin-password prompt, so the Mac stays on with the lid shut, even on
+  battery. A root watcher reverts it when the session ends or the daemon dies.
+  Keep the Mac ventilated: a closed, awake laptop in a bag gets hot.
+
+> macOS only. Without the lid switch, a MacBook with the lid closed on battery
+> still sleeps; that's an OS rule. Stdlib Python, no dependencies.
