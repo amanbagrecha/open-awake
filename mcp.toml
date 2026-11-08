@@ -1,0 +1,20 @@
+[[tool]]
+name = "status"
+description = "Whether Open Awake is keeping this Mac awake right now: start and end time, minutes remaining (null when it runs until stopped), whether the screen is kept on and whether closed-lid mode is on, plus minutes awake today and the last 5 sessions. Never starts anything."
+file = "tools.py"
+entrypoint = "status"
+signature = "status()"
+
+[[tool]]
+name = "stay_awake"
+description = "Keep this Mac from sleeping (macOS caffeinate). minutes = how long (0 = until stop is called); a running session is replaced in place. keep_screen_on true (default) also keeps the display lit. lid_closed true keeps the Mac on with the lid shut, even on battery: it shows a macOS admin password prompt on the Mac and waits for the person to approve it, so only use it when asked. Returns status."
+file = "tools.py"
+entrypoint = "stay_awake"
+signature = "stay_awake(minutes: float=0, keep_screen_on: bool=True, lid_closed: bool=False)"
+
+[[tool]]
+name = "stop"
+description = "End the current Open Awake session so the Mac can sleep normally again (also turns closed-lid mode off). Returns status."
+file = "tools.py"
+entrypoint = "stop"
+signature = "stop()"

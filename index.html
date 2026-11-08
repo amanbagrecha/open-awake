@@ -525,7 +525,7 @@ async function boot() {
   else { tick(); renderLog(); }
   setInterval(async () => {
     const s = await fused.daemon.status().catch(() => null);
-    if (s && s.running && state.active) api("state");
+    if (s && s.running) api("state");
     else if (s && !s.running && state.active) apply({ active: false, log: state.log });
   }, 5000);
   setInterval(() => { drawHands(); tick(); }, 1000);
